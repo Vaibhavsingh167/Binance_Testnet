@@ -9,7 +9,7 @@ Secret_Key = os.environ.get("BINANCE_SECRET_KEY")
 client = Client(API_Key, Secret_Key,testnet=True)
 
 symbol = 'BTCUSDT'
-buy_price_threshold  = 118000   # buy when price <= 118,000
+buy_price_threshold  = 118080   # buy when price <= 118,000
 sell_price_threshold = 118100   # sell when price >= 118,800
 trade_quantity       = 0.001
 
