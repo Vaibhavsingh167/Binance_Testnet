@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Binance Crypto Trading Bot</title>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Zoom/Pan plugin for Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        :root{
+            --bg:#f4f6f9;
+            --card:#ffffff;
+            --muted:#6b7280;
+            --accent:#0ea5a4;
+            --green:#16a34a;
+            --red:#dc2626;
+            --header:#0f172a;
+        }
+
+        * { box-sizing: border-box; }
+        body{
+            margin:0;
+            font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+            background: var(--bg);
+            color: #0b1220;
+            -webkit-font-smoothing:antialiased;
+        }
+
+        header{
+            background: linear-gradient(90deg,#0f172a 0%, #0b1220 100%);
+            color: #fff;
+            padding: 28px 16px;
+            text-align: center;
+            box-shadow: 0 6px 24px rgba(11,18,32,0.18);
+        }
+
+        header h1{ margin:0; font-size:1.6rem; letter-spacing: -0.5px; }
+        header p{ margin:6px 0 0; color: #bcd; font-size:0.95rem; }
+
+        .wrap{
+            max-width:1100px;
+            margin: 22px auto;
+            padding: 0 16px;
+        }
+
+        .grid{
+            display:grid;
+            gap:16px;
+            grid-template-columns: 1fr;
+        }
+
+        /* larger screens: sidebar + main */
+        @media(min-width:960px){
+            .grid{ grid-template-columns: 320px 1fr; align-items:start; }
+        }
+
+        .card{
+            background: var(--card);
+            border-radius:12px;
+            padding:16px;
+            box-shadow: 0 6px 18px rgba(12,18,30,0.06);
+        }
+
+        .controls{
+            display:flex;
+            flex-direction:column;
+            gap:12px;
+        }
+
+        .price-row{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:10px;
+        }
+
+        .price-large{
+            font-size:1.25rem;
+            font-weight:700;
+            color:var(--header);
+        }
+
+        .small{
+            color:var(--muted);
+            font-size:0.92rem;
+        }
+
+        .btn-row{
+            display:flex;
+            gap:10px;
+            margin-top:8px;
+        }
+
+        button{
+            border: none;
+            padding: 10px 14px;
+            border-radius:8px;
+            cursor:pointer;
+            font-weight:600;
+            font-size:0.95rem;
+        }
+
+        #startBtn{ background:#0ea5a4; color:white; }
+        #stopBtn { background:#ef4444; color:white; }
+
+        .status{
+            display:inline-block;
+            padding:6px 10px;
+            border-radius:999px;
+            font-weight:700;
+            font-size:0.9rem;
+            color:white;
+        }
+        .status.running{ background:var(--green); }
+        .status.stopped{ background:var(--red); }
+
+        .meta {
+            margin-top:12px;
+            color:var(--muted);
+            font-size:0.9rem;
+            line-height:1.4;
+        }
+
+        .chart-area{
+            display:flex;
+            flex-direction:column;
+            gap:12px;
+        }
+
+        canvas{
+            width:100% !important;
+            height:420px !important;
+            border-radius:10px;
+        }
+
+        .legend-explain{
+            color:var(--muted);
+            font-size:0.95rem;
+            display:flex;
+            gap:12px;
+            align-items:center;
+            justify-content:space-between;
+        }
+
+        .legend-badges{ display:flex; gap:12px; align-items:center; }
+        .badge{
+            display:inline-flex;
+            align-items:center;
+            gap:8px;
+            padding:6px 10px;
+            border-radius:999px;
+            font-weight:600;
+            font-size:0.9rem;
+            background: #f7f9fb;
+            color:#24303a;
+        }
+        .dot{ width:12px; height:12px; border-radius:50%; display:inline-block; }
+
+        footer{
+            margin:22px auto;
+            max-width:1100px;
+            color:var(--muted);
+            font-size:0.9rem;
+            padding:0 16px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Binance Crypto Trading Bot</h1>
+        <p>Real-time BTCUSDT price chart with buy/sell markers — zoom & pan enabled.</p>
+    </header>
+
+    <div class="wrap">
+        <div class="grid">
+
+            <!-- LEFT: controls / info -->
+            <div class="card controls">
+                <div class="price-row">
+                    <div>
+                        <div class="small">Current BTCUSDT</div>
+                        <div id="price" class="price-large">Loading…</div>
+                    </div>
+
+                    <div style="text-align:right">
+                        <div class="small">Bot Status</div>
+                        <div id="botStatus" class="status stopped">STOPPED</div>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button id="startBtn" onclick="startBot()">Start Bot</button>
+                    <button id="stopBtn" onclick="stopBot()">Stop Bot</button>
+                </div>
+
+                <div class="meta">
+                    <strong>Chart description</strong>
+                    <p style="margin:8px 0 0;">
+                        This is a live-updating **BTCUSDT price chart** (line). Green dots are **Buy** trades and red dots are **Sell** trades recorded by the bot.
+                        Use mouse wheel / pinch to zoom and drag to pan horizontally.
+                    </p>
+                </div>
+
+                <div style="margin-top:12px">
+                    <strong>Notes</strong>
+                    <ul style="margin:8px 0 0 18px; color:var(--muted)">
+                        <li>Data updates from endpoints: <code>/price</code> and <code>/history</code>.</li>
+                        <li>If chart looks empty, confirm the backend is running and endpoints return arrays of points.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- RIGHT: chart -->
+            <div class="card chart-area">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h3 style="margin:0">BTCUSDT Price Chart</h3>
+                        <div class="small">Live price line, buy/sell trade markers.</div>
+                    </div>
+
+                    <div class="legend-explain" style="max-width:420px;">
+                        <div class="legend-badges">
+                            <div class="badge"><span class="dot" style="background:#2563eb"></span> Price</div>
+                            <div class="badge"><span class="dot" style="background:#16a34a"></span> Buy</div>
+                            <div class="badge"><span class="dot" style="background:#ef4444"></span> Sell</div>
+                        </div>
+
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <button onclick="resetZoom()" style="padding:8px 10px; border-radius:8px; border:none; background:#e6eef7; cursor:pointer;">Reset Zoom</button>
+                        </div>
+                    </div>
+                </div>
+
+                <canvas id="priceChart"></canvas>
+            </div>
+
+        </div>
+    </div>
+
+    <footer>
+        <div>Graph type: <strong>Line chart (time series)</strong> — Blue line shows price history; scatter points mark trades.</div>
+    </footer>
+
+    <script>
+        // Setup Chart.js chart with zoom plugin
+        const ctx = document.getElementById('priceChart').getContext('2d');
+
+        // datasets: price (line), buy (scatter), sell (scatter)
+        const chartConfig = {
+            type: 'line',
+            data: {
+                labels: [], // time labels like "HH:MM:SS"
+                datasets: [
+                    {
+                        label: 'BTC Price',
+                        data: [], // numeric y-values (index aligned with labels)
+                        borderWidth: 2,
+                        tension: 0.15,
+                        pointRadius: 0,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'transparent',
+                    },
+                    {
+                        label: 'Buy',
+                        data: [], // array of {x: label, y: price}
+                        type: 'scatter',
+                        pointRadius: 7,
+                        pointStyle: 'circle',
+                        showLine: false,
+                        backgroundColor: '#16a34a',
+                        borderColor: '#0f7a3f',
+                        borderWidth: 1.2,
+                    },
+                    {
+                        label: 'Sell',
+                        data: [],
+                        type: 'scatter',
+                        pointRadius: 7,
+                        pointStyle: 'rectRounded',
+                        showLine: false,
+                        backgroundColor: '#ef4444',
+                        borderColor: '#b91c1c',
+                        borderWidth: 1.2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'BTC Price') {
+                                    return `Price: ${context.formattedValue}`;
+                                } else {
+                                    // scatter (buy/sell)
+                                    return `${context.dataset.label}: ${context.raw.y}`;
+                                }
+                            }
+                        }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            modifierKey: 'ctrl', // press ctrl to pan (useful to avoid accidental panning)
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'x',
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: { display: true, text: 'Time (HH:MM:SS)' },
+                        ticks: {
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: { display: true, text: 'Price (USDT)' },
+                        ticks: { beginAtZero: false }
+                    }
+                }
+            }
+        };
+
+        const priceChart = new Chart(ctx, chartConfig);
+
+        // Bot status local state
+        let botIsRunning = false;
+
+        function updateBotStatusUI() {
+            const el = document.getElementById('botStatus');
+            if (botIsRunning) {
+                el.textContent = 'RUNNING';
+                el.classList.remove('stopped');
+                el.classList.add('running');
+            } else {
+                el.textContent = 'STOPPED';
+                el.classList.remove('running');
+                el.classList.add('stopped');
+            }
+        }
+
+        async function fetchPrice() {
+            try {
+                const res = await fetch('/price');
+                const data = await res.json();
+                if (data.price !== undefined) {
+                    document.getElementById('price').textContent = Number(data.price).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+                }
+            } catch (err) {
+                // console.warn('price fetch error', err);
+            }
+        }
+
+        async function fetchHistory() {
+            try {
+                const res = await fetch('/history');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // data.prices expected as array of [timestampStr, price]
+                // data.trades expected as array of [timestampStr, price, 'BUY'/'SELL']
+                if (Array.isArray(data.prices)) {
+                    // labels and price dataset
+                    const labels = data.prices.map(p => p[0]);
+                    const prices = data.prices.map(p => p[1]);
+
+                    priceChart.data.labels = labels;
+                    priceChart.data.datasets[0].data = prices;
+                }
+
+                if (Array.isArray(data.trades)) {
+                    const buys = data.trades.filter(t => (t[2]||'').toUpperCase() === 'BUY')
+                        .map(t => ({ x: t[0], y: t[1] }));
+                    const sells = data.trades.filter(t => (t[2]||'').toUpperCase() === 'SELL')
+                        .map(t => ({ x: t[0], y: t[1] }));
+
+                    priceChart.data.datasets[1].data = buys;
+                    priceChart.data.datasets[2].data = sells;
+                }
+
+                priceChart.update('none');
+            } catch (err) {
+                // console.warn('history fetch error', err);
+            }
+        }
+
+        async function startBot() {
+            try {
+                const res = await fetch('/start', { method: 'POST' });
+                const data = await res.json();
+                botIsRunning = true;
+                updateBotStatusUI();
+                // quick visual feedback
+                alert(data.status || 'Bot started');
+            } catch (err) {
+                alert('Failed to start bot: ' + err);
+            }
+        }
+
+        async function stopBot() {
+            try {
+                const res = await fetch('/stop', { method: 'POST' });
+                const data = await res.json();
+                botIsRunning = false;
+                updateBotStatusUI();
+                alert(data.status || 'Bot stopped');
+            } catch (err) {
+                alert('Failed to stop bot: ' + err);
+            }
+        }
+
+        function resetZoom() {
+            priceChart.resetZoom();
+        }
+
+        // Initial fetch + repeated polling
+        fetchPrice();
+        fetchHistory();
+        updateBotStatusUI();
+
+        setInterval(fetchPrice, 3000);
+        setInterval(fetchHistory, 3000);
+
+        // optional: detect window focus and refetch immediately
+        window.addEventListener('focus', () => { fetchPrice(); fetchHistory(); });
+
+    </script>
+</body>
+</html>
